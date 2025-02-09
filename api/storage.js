@@ -1,12 +1,16 @@
-const Sybase = require('sybase');
+const { Connection } = require('tds');
 
-let db = new Sybase(
-    process.env.SYBASE_HOST,
-    process.env.SYBASE_PORT,
-    process.env.SYBASE_DATABASE,
-    process.env.SYBASE_USER,
-    process.env.SYBASE_PASSWORD
-);
+const dbConfig = {
+    server: process.env.SYBASE_HOST,
+    port: parseInt(process.env.SYBASE_PORT, 10),
+    options: {
+        database: process.env.SYBASE_DATABASE,
+        userName: process.env.SYBASE_USER,
+        password: process.env.SYBASE_PASSWORD,
+        encrypt: false, // Set to true if required by your Sybase server
+        rowCollectionOnDone: true, // Ensures rows are collected in the `done` event
+    },
+};
 
 function convertToBytes(size) {
     if (!size) return 0;
@@ -16,9 +20,11 @@ function convertToBytes(size) {
 }
 
 export default async function handler(req, res) {
+    const connection = new Connection(dbConfig);
+
     try {
         // Connect to the Sybase database
-        db.connect((connectErr) => {
+        connection.connect((connectErr) => {
             if (connectErr) {
                 console.error('Connection error:', connectErr);
                 return res.status(500).json({ error: 'Failed to connect to Sybase database' });
@@ -26,17 +32,17 @@ export default async function handler(req, res) {
 
             // Define the query
             const query = `SELECT * FROM RDJ_Storage_Monitoring`; // Update with your actual table
-            
-            // Execute the query
-            db.query(query, (queryErr, result) => {
-                if (queryErr) {
-                    console.error('Query error:', queryErr);
-                    db.disconnect();
-                    return res.status(500).json({ error: 'Failed to execute query' });
-                }
 
-                // Process the result
-                const formattedData = result.map(row => {
+            // Execute the query
+            const request = connection.request();
+            request.sqlText = query;
+
+            request.on('row', (row) => {
+                console.log('Row:', row);
+            });
+
+            request.on('done', (result) => {
+                const formattedData = result.rows.map((row) => {
                     const totalBytes = convertToBytes(row.total);
                     const usedBytes = convertToBytes(row.used);
                     const freeBytes = convertToBytes(row.free);
@@ -50,17 +56,28 @@ export default async function handler(req, res) {
                         free: freeBytes,
                         percent: percentUsed,
                         mount: row.mount,
-                        account: row.account
+                        account: row.account,
                     };
                 });
 
-                // Disconnect and return the response
-                db.disconnect();
+                // Close the connection and send the response
+                connection.close();
                 res.status(200).json(formattedData);
             });
+
+            request.on('error', (queryErr) => {
+                console.error('Query error:', queryErr);
+                connection.close();
+                res.status(500).json({ error: 'Failed to execute query' });
+            });
+
+            connection.execSql(request);
         });
     } catch (error) {
         console.error('Unexpected error:', error);
+        if (connection.state === 'LoggedIn') {
+            connection.close();
+        }
         res.status(500).json({ error: 'Internal Server Error' });
     }
 }

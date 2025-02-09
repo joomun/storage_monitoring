@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "odbc": "^2.4.9",
-    "sybase": "^1.2.3"
+    "sybase": "^1.2.3",
+    "tds": "^0.1.0"
   }
 }
