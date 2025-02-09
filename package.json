@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "sybase": "^1.2.3"
+  }
+}
