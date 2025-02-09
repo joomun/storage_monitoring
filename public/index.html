@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sybase Storage Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f6fa; }
+        .filter-container, .chart-container { background: white; padding: 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
+        .bar-chart { display: flex; flex-direction: column; gap: 10px; }
+        .bar-wrapper { display: flex; align-items: center; }
+        .bar-label { min-width: 200px; }
+        .bar-container { flex-grow: 1; height: 20px; background: #ddd; border-radius: 10px; position: relative; overflow: hidden; }
+        .bar-usage { height: 100%; transition: width 0.5s ease; }
+        .bar-green { background: #27ae60; }
+        .bar-yellow { background: #f1c40f; }
+        .bar-red { background: #e74c3c; }
+    </style>
+</head>
+<body>
+
+    <h1>Sybase Storage Usage Dashboard</h1>
+    
+    <div class="filter-container">
+        <label for="account-filter">Account:</label>
+        <select id="account-filter">
+            <option value="All">All</option>
+        </select>
+        <label for="mount-filter">Mount:</label>
+        <select id="mount-filter">
+            <option value="All">All</option>
+        </select>
+        <button onclick="filterData()">Filter</button>
+    </div>
+
+    <div id="chart-container" class="chart-container"></div>
+
+    <script>
+        let data = [];
+
+        async function fetchData() {
+            const response = await fetch('/api/storage'); // Fetch from Vercel API
+            data = await response.json();
+            populateFilters();
+            renderChart(data);
+        }
+
+        function populateFilters() {
+            const accountFilter = document.getElementById('account-filter');
+            const mountFilter = document.getElementById('mount-filter');
+
+            const accounts = [...new Set(data.map(item => item.account))];
+            const mounts = [...new Set(data.map(item => item.mount))];
+
+            accountFilter.innerHTML = '<option value="All">All</option>' + accounts.map(a => `<option value="${a}">${a}</option>`).join('');
+            mountFilter.innerHTML = '<option value="All">All</option>' + mounts.map(m => `<option value="${m}">${m}</option>`).join('');
+        }
+
+        function filterData() {
+            const account = document.getElementById('account-filter').value;
+            const mount = document.getElementById('mount-filter').value;
+
+            const filteredData = data.filter(item =>
+                (account === "All" || item.account === account) &&
+                (mount === "All" || item.mount === mount)
+            );
+
+            renderChart(filteredData);
+        }
+
+        function renderChart(filteredData) {
+            const chartContainer = document.getElementById('chart-container');
+            chartContainer.innerHTML = '';
+
+            if (filteredData.length === 0) {
+                chartContainer.innerHTML = '<p>No data available for the selected filters.</p>';
+                return;
+            }
+
+            const barChart = document.createElement('div');
+            barChart.className = 'bar-chart';
+
+            filteredData.forEach(item => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'bar-wrapper';
+
+                const label = document.createElement('div');
+                label.className = 'bar-label';
+                label.textContent = `${item.mount} (${item.account}) - ${item.timestamp}`;
+
+                const barContainer = document.createElement('div');
+                barContainer.className = 'bar-container';
+
+                const usageBar = document.createElement('div');
+                usageBar.style.width = `${item.percent}%`;
+                usageBar.className = item.percent < 50 ? 'bar-green' : item.percent < 80 ? 'bar-yellow' : 'bar-red';
+
+                barContainer.appendChild(usageBar);
+                wrapper.appendChild(label);
+                wrapper.appendChild(barContainer);
+                barChart.appendChild(wrapper);
+            });
+
+            chartContainer.appendChild(barChart);
+        }
+
+        document.addEventListener('DOMContentLoaded', fetchData);
+    </script>
+
+</body>
+</html>
